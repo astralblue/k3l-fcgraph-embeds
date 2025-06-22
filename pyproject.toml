@@ -1,0 +1,48 @@
+[build-system]
+requires = ["flit_core >=3.11,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "k3l-fcgraph-embeds"
+authors = [
+    {name = "Eugene Kim", email = "ab@astral.blue"},
+]
+description = "Normalizes Farcaster cast embeds into canonical forms."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dynamic = ["version"]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "isort[colors]",
+    "pytest",
+    "pytest-cov",
+]
+docs = [
+    "sphinx",
+    "sphinx-rtd-theme",
+]
+
+[project.urls]
+Homepage = "https://github.com/Eugene Kim/k3l-fcgraph-embeds"
+Repository = "https://github.com/Eugene Kim/k3l-fcgraph-embeds"
+Issues = "https://github.com/Eugene Kim/k3l-fcgraph-embeds/issues"
+
+[tool.flit.module]
+name = "k3l.fcgraph.embeds"
+
+[tool.isort]
+profile = "black"
