@@ -24,6 +24,10 @@ classifiers = [
 dynamic = ["version"]
 dependencies = [
     "pydantic>=2.0.0,<3.0.0",
+    "alembic>=1.13.0,<2.0.0",
+    "sqlalchemy>=2.0.0,<3.0.0",
+    "asyncpg>=0.29.0,<1.0.0",
+    "psycopg2-binary>=2.9.0,<3.0.0",
 ]
 
 [project.optional-dependencies]
@@ -45,6 +49,15 @@ Issues = "https://github.com/Eugene Kim/k3l-fcgraph-embeds/issues"
 
 [tool.flit.module]
 name = "k3l.fcgraph.embeds"
+
+[tool.flit.sdist]
+include = [
+    "k3l/fcgraph/embeds/migrations/",
+    "k3l/fcgraph/embeds/migrations/versions/",
+    "k3l/fcgraph/embeds/migrations/*.py",
+    "k3l/fcgraph/embeds/migrations/versions/*.py", 
+    "k3l/fcgraph/embeds/migrations/*.mako",
+]
 
 [tool.isort]
 profile = "black"

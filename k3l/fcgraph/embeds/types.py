@@ -1,4 +1,25 @@
-"""Farcaster data type models using Pydantic V2."""
+"""Farcaster data type models using Pydantic V2.
+
+This module provides Pydantic models for parsing and validating Farcaster cast embeds,
+including support for malformed data commonly found in real-world Farcaster databases.
+
+Key features:
+- Flexible hash parsing (hex, base64, Node.js Buffer format)
+- Permissive embed parsing from malformed JSON strings
+- Type-safe models with comprehensive validation
+- Support for both URL and cast quote embeds
+
+Example:
+    >>> from k3l.fcgraph.embeds.types import Embeds
+    >>>
+    >>> # Parse well-formed JSON
+    >>> embeds = Embeds.model_validate('[{"url": "https://example.com"}]')
+    >>> print(len(embeds))  # 1
+    >>>
+    >>> # Parse malformed string with single quotes
+    >>> embeds = Embeds.model_validate("[{'url': 'https://example.com'}]")
+    >>> print(embeds[0].url)  # https://example.com
+"""
 
 import ast
 import base64
@@ -10,13 +31,27 @@ from pydantic import BaseModel, ConfigDict, Field, RootModel, field_validator
 def _parse_hash(value: Union[str, bytes, dict]) -> bytes:
     """Parse hash from various formats into bytes.
 
-    Accepts:
-    - "0x..." (canonical Farcaster format)
-    - "..." (hex without prefix)
-    - Base64 encoded strings
-    - {"data": [byte_array], "type": "Buffer"} (Node.js Buffer format)
+    This function provides permissive parsing of Farcaster cast hashes from multiple
+    input formats commonly found in different Farcaster clients and databases.
 
-    Returns exactly 20 bytes (160 bits) for cast hashes.
+    Args:
+        value: Hash in one of the supported formats:
+            - str: "0x..." (canonical), "..." (hex), or base64
+            - bytes: Raw bytes (must be exactly 20 bytes)
+            - dict: Node.js Buffer format {"data": [bytes], "type": "Buffer"}
+
+    Returns:
+        bytes: Exactly 20 bytes (160 bits) representing the cast hash
+
+    Raises:
+        ValueError: If the input cannot be parsed or doesn't result in 20 bytes
+
+    Examples:
+        >>> _parse_hash("0x1234567890123456789012345678901234567890")
+        b'\\x124Vx\\x90\\x124Vx\\x90\\x124Vx\\x90\\x124Vx\\x90'
+
+        >>> _parse_hash({"data": [1,2,3,...,20], "type": "Buffer"})
+        b'\\x01\\x02\\x03...\\x14'
     """
     if isinstance(value, bytes):
         if len(value) != 20:
@@ -83,7 +118,25 @@ def _parse_hash(value: Union[str, bytes, dict]) -> bytes:
 
 
 class CastId(BaseModel):
-    """A Farcaster Cast ID consisting of user FID and cast hash."""
+    """A Farcaster Cast ID consisting of user FID and cast hash.
+
+    CastIds uniquely identify individual casts on the Farcaster network.
+    They are used in quote casts (equivalent to quote tweets) to reference
+    the original cast being quoted.
+
+    Attributes:
+        fid (int): Farcaster ID of the user who created the cast
+        hash (bytes): Unique 20-byte hash of the specific cast
+
+    Examples:
+        >>> cast_id = CastId(fid=123, hash=b'\\x12\\x34...')
+        >>> print(f"Cast by user {cast_id.fid}")
+        Cast by user 123
+
+        >>> # Parse from Node.js Buffer format
+        >>> data = {"fid": 123, "hash": {"data": [1,2,3,...], "type": "Buffer"}}
+        >>> cast_id = CastId.model_validate(data)
+    """
 
     fid: int = Field(description="Farcaster ID of the user who created the cast")
     hash: bytes = Field(description="Unique hash of the specific cast")
@@ -96,7 +149,27 @@ class CastId(BaseModel):
 
 
 class Embed(BaseModel):
-    """A Farcaster embed that can contain either a URL or a cast reference."""
+    """A Farcaster embed that can contain either a URL or a cast reference.
+
+    Farcaster embeds allow casts to include rich content like images, links,
+    NFTs, or references to other casts (quote casts). Each embed must contain
+    exactly one of: a URL or a cast reference.
+
+    Attributes:
+        url (str, optional): URL for web links, images, or Ethereum assets
+        cast_id (CastId, optional): Reference to another cast for quote casts
+
+    Examples:
+        >>> # URL embed
+        >>> embed = Embed(url="https://example.com/image.jpg")
+        >>> print(embed.url)
+        https://example.com/image.jpg
+
+        >>> # Cast quote embed
+        >>> embed = Embed(cast_id=CastId(fid=123, hash=b'\\x12\\x34...'))
+        >>> print(f"Quotes cast by user {embed.cast_id.fid}")
+        Quotes cast by user 123
+    """
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -116,18 +189,36 @@ class Embed(BaseModel):
 def parse_embeds_from_string(embeds_str: str) -> List[Embed]:
     """Parse embeds from string representation.
 
-    Handles degenerate cases where a single embeds field is represented as:
-    - String literal of Python list: "[{'url': '...'}]"
-    - String literal containing multiple embeds: "[{'url': '...'}, {'castId': {...}}]"
+    This function handles malformed embed data commonly found in Farcaster databases
+    where JSON was stored as strings with incorrect quoting or formatting.
 
     Args:
-        embeds_str: String representation of a single embeds array
+        embeds_str: String representation of an embeds array, such as:
+            - "[{'url': 'https://example.com'}]" (single quotes)
+            - "[{'castId': {'fid': 123, 'hash': {...}}}]" (nested structures)
 
     Returns:
-        List of Embed objects
+        List[Embed]: Parsed and validated embed objects
 
     Raises:
-        ValueError: If string cannot be parsed
+        ValueError: If the string cannot be safely parsed or validated
+
+    Examples:
+        >>> embeds = parse_embeds_from_string("[{'url': 'https://example.com'}]")
+        >>> print(len(embeds))
+        1
+        >>> print(embeds[0].url)
+        https://example.com
+
+        >>> # Handles complex nested structures
+        >>> embed_str = "[{'castId': {'fid': 123, 'hash': {'data': [1,2,3], 'type': 'Buffer'}}}]"
+        >>> embeds = parse_embeds_from_string(embed_str)
+        >>> print(embeds[0].cast_id.fid)
+        123
+
+    Note:
+        Uses ast.literal_eval() for safe parsing of Python literals.
+        Does not execute arbitrary code.
     """
     if not embeds_str.strip():
         return []
@@ -157,13 +248,39 @@ def parse_embeds_from_string(embeds_str: str) -> List[Embed]:
 class Embeds(RootModel[List[Embed]]):
     """A Pydantic model representing a list of embeds with flexible input parsing.
 
+    This is the main entry point for parsing Farcaster embed data. It provides
+    robust parsing capabilities to handle the variety of formats found in
+    real-world Farcaster databases, including malformed JSON strings.
+
     Supports multiple input formats:
     - List of Embed objects: [Embed(...), Embed(...)]
     - List of dictionaries: [{"url": "..."}, {"castId": {...}}]
-    - String representation: "[{'url': '...'}]"
+    - String representation: "[{'url': '...'}]" (handles single quotes)
     - Empty values: None, "", []
 
-    Implements sequence-like behavior.
+    Implements full sequence protocol for list-like behavior.
+
+    Examples:
+        >>> # Parse from well-formed JSON
+        >>> embeds = Embeds.model_validate('[{"url": "https://example.com"}]')
+        >>> print(len(embeds))
+        1
+
+        >>> # Parse from malformed string (common in databases)
+        >>> embeds = Embeds.model_validate("[{'url': 'https://example.com'}]")
+        >>> for embed in embeds:
+        ...     print(embed.url)
+        https://example.com
+
+        >>> # Works with empty/None values
+        >>> embeds = Embeds.model_validate(None)
+        >>> print(len(embeds))
+        0
+
+        >>> # List-like operations
+        >>> embeds.append(Embed(url="https://new-url.com"))
+        >>> print(embeds[0].url)
+        https://new-url.com
     """
 
     @field_validator("root", mode="before")
