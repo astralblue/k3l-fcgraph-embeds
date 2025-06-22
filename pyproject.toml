@@ -48,3 +48,10 @@ name = "k3l.fcgraph.embeds"
 
 [tool.isort]
 profile = "black"
+skip_glob = [
+    ".venvs/*",
+    ".venv/*",
+    "venv/*",
+    "env/*",
+    "*/site-packages/*",
+]
