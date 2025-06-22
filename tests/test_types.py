@@ -58,8 +58,8 @@ class TestParseHash:
             _parse_hash(invalid_hex)
     
     def test_parse_hash_invalid_type(self):
-        """Test error when input is not string or bytes."""
-        with pytest.raises(ValueError, match="Hash must be string or bytes"):
+        """Test error when input is not string, bytes, or dict."""
+        with pytest.raises(ValueError, match="Hash must be string, bytes, or Buffer dict"):
             _parse_hash(123)
     
     def test_parse_hash_unparseable_string(self):
@@ -67,6 +67,51 @@ class TestParseHash:
         unparseable = "not-a-valid-hash-format"
         with pytest.raises(ValueError, match="Unable to parse hash from"):
             _parse_hash(unparseable)
+    
+    def test_parse_hash_buffer_format(self):
+        """Test parsing Node.js Buffer format."""
+        buffer_data = {
+            "data": [204, 4, 137, 65, 96, 25, 108, 225, 113, 91, 149, 2, 253, 153, 15, 240, 37, 116, 198, 118],
+            "type": "Buffer"
+        }
+        expected = bytes([204, 4, 137, 65, 96, 25, 108, 225, 113, 91, 149, 2, 253, 153, 15, 240, 37, 116, 198, 118])
+        assert _parse_hash(buffer_data) == expected
+    
+    def test_parse_hash_buffer_wrong_length(self):
+        """Test error when Buffer data has wrong length."""
+        buffer_data = {"data": [1, 2, 3], "type": "Buffer"}
+        with pytest.raises(ValueError, match="Hash must be exactly 20 bytes"):
+            _parse_hash(buffer_data)
+    
+    def test_parse_hash_buffer_invalid_data_type(self):
+        """Test error when Buffer data is not a list."""
+        buffer_data = {"data": "not-a-list", "type": "Buffer"}
+        with pytest.raises(ValueError, match="Buffer data must be a list of integers"):
+            _parse_hash(buffer_data)
+    
+    def test_parse_hash_buffer_invalid_byte_values(self):
+        """Test error when Buffer data contains invalid byte values."""
+        buffer_data = {"data": [256, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19], "type": "Buffer"}
+        with pytest.raises(ValueError, match="Invalid Buffer data"):
+            _parse_hash(buffer_data)
+    
+    def test_parse_hash_buffer_missing_type(self):
+        """Test error when Buffer format is missing type field."""
+        buffer_data = {"data": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]}
+        with pytest.raises(ValueError, match="Hash dict must be Buffer format"):
+            _parse_hash(buffer_data)
+    
+    def test_parse_hash_buffer_missing_data(self):
+        """Test error when Buffer format is missing data field."""
+        buffer_data = {"type": "Buffer"}
+        with pytest.raises(ValueError, match="Hash dict must be Buffer format"):
+            _parse_hash(buffer_data)
+    
+    def test_parse_hash_dict_wrong_type(self):
+        """Test error when dict has wrong type field."""
+        wrong_data = {"data": [1, 2, 3], "type": "NotBuffer"}
+        with pytest.raises(ValueError, match="Hash dict must be Buffer format"):
+            _parse_hash(wrong_data)
 
 
 class TestCastId:
@@ -114,6 +159,17 @@ class TestCastId:
         """Test CastId validation error with wrong hash length."""
         with pytest.raises(ValidationError):
             CastId(fid=123, hash="0x1234")
+    
+    def test_cast_id_buffer_format(self):
+        """Test CastId creation with Buffer format hash."""
+        buffer_hash = {
+            "data": [204, 4, 137, 65, 96, 25, 108, 225, 113, 91, 149, 2, 253, 153, 15, 240, 37, 116, 198, 118],
+            "type": "Buffer"
+        }
+        cast_id = CastId(fid=253133, hash=buffer_hash)
+        assert cast_id.fid == 253133
+        expected_bytes = bytes([204, 4, 137, 65, 96, 25, 108, 225, 113, 91, 149, 2, 253, 153, 15, 240, 37, 116, 198, 118])
+        assert cast_id.hash == expected_bytes
 
 
 class TestEmbed:

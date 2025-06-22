@@ -6,13 +6,14 @@ from typing import Optional, Union
 from pydantic import BaseModel, Field, field_validator
 
 
-def _parse_hash(value: Union[str, bytes]) -> bytes:
-    """Parse hash from various string formats into bytes.
+def _parse_hash(value: Union[str, bytes, dict]) -> bytes:
+    """Parse hash from various formats into bytes.
     
     Accepts:
     - "0x..." (canonical Farcaster format)  
     - "..." (hex without prefix)
     - Base64 encoded strings
+    - {"data": [byte_array], "type": "Buffer"} (Node.js Buffer format)
     
     Returns exactly 20 bytes (160 bits) for cast hashes.
     """
@@ -21,8 +22,24 @@ def _parse_hash(value: Union[str, bytes]) -> bytes:
             raise ValueError(f"Hash must be exactly 20 bytes, got {len(value)}")
         return value
     
+    # Handle Node.js Buffer format: {"data": [byte_array], "type": "Buffer"}
+    if isinstance(value, dict):
+        if value.get("type") == "Buffer" and "data" in value:
+            data = value["data"]
+            if not isinstance(data, list):
+                raise ValueError("Buffer data must be a list of integers")
+            if len(data) != 20:
+                raise ValueError(f"Hash must be exactly 20 bytes, got {len(data)}")
+            try:
+                result = bytes(data)
+                return result
+            except (ValueError, TypeError) as e:
+                raise ValueError(f"Invalid Buffer data: {e}")
+        else:
+            raise ValueError("Hash dict must be Buffer format with 'data' and 'type' fields")
+    
     if not isinstance(value, str):
-        raise ValueError("Hash must be string or bytes")
+        raise ValueError("Hash must be string, bytes, or Buffer dict")
     
     # Try 0x-prefixed hex first (canonical)
     if value.startswith("0x"):
